@@ -7,3 +7,5 @@ node_modules/
 .ipynb_checkpoints
 data/raw/*
 data/processed/*
+models/*.h5
+models/*.keras
