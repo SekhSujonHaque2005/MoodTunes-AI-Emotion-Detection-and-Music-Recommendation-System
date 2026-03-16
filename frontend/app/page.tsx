@@ -195,13 +195,21 @@ export default function Home() {
                       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                       onDragLeave={() => setDragOver(false)}
                       onDrop={onDrop}
+                      onClick={() => document.getElementById("fileInput")?.click()}
+                      style={{ cursor: "pointer" }}
                     >
                       <div className="upload-icon-wrap">🖼️</div>
                       <p><span>Click to upload</span> or drag &amp; drop</p>
                       <p style={{ marginTop: 8, fontSize: "0.8rem", opacity: 0.5 }}>
                         JPG · PNG · WEBP · GIF
                       </p>
-                      <input type="file" accept="image/*" onChange={onFileInput} />
+                      <input 
+                        id="fileInput" 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={onFileInput} 
+                        style={{ display: "none" }} 
+                      />
                     </div>
                   )}
                   {previewUrl && (

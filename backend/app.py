@@ -3,6 +3,19 @@ import re
 import traceback
 import tempfile
 import os
+
+# ── IMPORTANT: Must import and load model BEFORE deepface/keras! ──
+try:
+    from backend.model_loader import load_emotion_model, load_emotion_labels
+except ImportError:
+    from model_loader import load_emotion_model, load_emotion_labels
+
+print("Loading custom emotion model...")
+# This applies the Keras 3 compat patch and loads the model
+emotion_model = load_emotion_model()
+idx_to_label = load_emotion_labels()
+# ──────────────────────────────────────────────────────────────────
+
 import numpy as np
 import cv2
 import requests
@@ -12,8 +25,8 @@ from deepface import DeepFace
 
 app = FastAPI(
     title="Emotion Detection API",
-    description="Detects emotions from images and recommends music accordingly.",
-    version="2.0.0",
+    description="Hybrid pipeline: DeepFace for face detection, custom CNN for emotion classification.",
+    version="3.0.0",
 )
 
 app.add_middleware(
@@ -24,16 +37,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Normalize DeepFace emotion keys to match our labels
-DEEPFACE_EMOTION_MAP = {
-    "angry":    "angry",
-    "disgust":  "disgust",
-    "fear":     "fear",
-    "happy":    "happy",
-    "sad":      "sad",
-    "surprise": "surprise",
-    "neutral":  "neutral",
-}
+# ── Load custom model & labels at startup ──────────────────────────────
+print("Loading custom emotion model...")
+emotion_model = load_emotion_model()
+idx_to_label = load_emotion_labels()
 
 # Emotion → YouTube search query
 EMOTION_QUERIES = {
@@ -45,6 +52,41 @@ EMOTION_QUERIES = {
     "fear":     "calming peaceful piano music",
     "disgust":  "lofi hip hop chill beats",
 }
+
+
+def preprocess_face(face_pixels: np.ndarray) -> np.ndarray:
+    """Convert a face crop to the format expected by our custom model:
+    RGB, 224x224, normalised to [0,1], shape (1, 224, 224, 3).
+    """
+    # Ensure 3 channels (BGR → keep as-is for now, model was likely trained on RGB via keras)
+    if len(face_pixels.shape) == 2:
+        face_pixels = cv2.cvtColor(face_pixels, cv2.COLOR_GRAY2BGR)
+
+    # Convert BGR to RGB (OpenCV loads as BGR, Keras models expect RGB)
+    rgb = cv2.cvtColor(face_pixels, cv2.COLOR_BGR2RGB)
+    resized = cv2.resize(rgb, (224, 224))
+    normalised = resized.astype("float32") / 255.0
+    return normalised.reshape(1, 224, 224, 3)
+
+
+def classify_emotion(face_pixels: np.ndarray):
+    """Run the custom CNN model on a preprocessed face crop.
+    Returns (emotion_label, confidence, all_emotions_dict).
+    """
+    processed = preprocess_face(face_pixels)
+    predictions = emotion_model.predict(processed, verbose=0)[0]
+
+    # Build emotion scores dict
+    all_emotions = {}
+    for idx, score in enumerate(predictions):
+        label = idx_to_label.get(idx, f"unknown_{idx}")
+        all_emotions[label] = round(float(score), 4)
+
+    predicted_idx = int(np.argmax(predictions))
+    emotion = idx_to_label.get(predicted_idx, "neutral")
+    confidence = round(float(predictions[predicted_idx]), 4)
+
+    return emotion, confidence, all_emotions
 
 
 def get_music_by_emotion(emotion: str, limit: int = 5):
@@ -113,65 +155,71 @@ def get_music_by_emotion(emotion: str, limit: int = 5):
 
 @app.get("/")
 def home():
-    return {"message": "Emotion Detection API is running (DeepFace v2)"}
+    return {"message": "Emotion Detection API is running (Hybrid v3 — DeepFace + Custom CNN)"}
 
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "engine": "DeepFace"}
+    return {"status": "ok", "engine": "hybrid", "model": "custom_emotion_model.h5"}
 
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
-    """Upload a face image → DeepFace emotion analysis → YouTube songs."""
+    """Upload a face image → DeepFace face detection → custom CNN emotion → YouTube songs."""
 
     tmp_path = None
     try:
         contents = await file.read()
 
-        # Decode image bytes to verify it's a valid image
+        # Decode image bytes
         npimg = np.frombuffer(contents, np.uint8)
         img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
 
         if img is None:
             raise HTTPException(status_code=400, detail="Invalid image file")
 
-        # Save to temp file (DeepFace works best with file paths)
+        # Save to temp file for DeepFace
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
             tmp_path = tmp.name
             cv2.imwrite(tmp_path, img)
 
-        # Run DeepFace emotion analysis — enforce_detection=False allows
-        # it to work even if the face detector confidence is low
-        result = DeepFace.analyze(
-            img_path=tmp_path,
-            actions=["emotion"],
-            enforce_detection=False,
-            silent=True,
-        )
+        # ── Step 1: Use DeepFace to detect & extract face regions ──────
+        face_detected = True
+        try:
+            faces = DeepFace.extract_faces(
+                img_path=tmp_path,
+                detector_backend="opencv",
+                enforce_detection=True,
+                align=True,
+            )
 
-        # DeepFace returns a list; take the first (dominant) face
-        face_result = result[0] if isinstance(result, list) else result
-        dominant_emotion = str(face_result["dominant_emotion"]).lower()
+            if faces and len(faces) > 0:
+                # Get the face crop (DeepFace returns RGB float [0,1])
+                face_pixels = faces[0]["face"]
+                # Convert from RGB float [0,1] to BGR uint8 [0,255]
+                face_bgr = (face_pixels * 255).astype(np.uint8)
+                face_bgr = cv2.cvtColor(face_bgr, cv2.COLOR_RGB2BGR)
+            else:
+                # Fallback: use the full image
+                face_detected = False
+                face_bgr = img
 
-        # Convert all emotion scores from numpy.float32 → Python float
-        emotion_scores = {
-            str(k): float(v)
-            for k, v in face_result["emotion"].items()
-        }
-        confidence = round(emotion_scores[dominant_emotion] / 100.0, 4)
+        except Exception:
+            # Face detection failed — fallback to full image
+            face_detected = False
+            face_bgr = img
 
-        # Normalize emotion key
-        emotion = DEEPFACE_EMOTION_MAP.get(dominant_emotion, dominant_emotion)
+        # ── Step 2: Classify emotion with custom CNN model ─────────────
+        emotion, confidence, all_emotions = classify_emotion(face_bgr)
 
-        # Get music recommendations
+        # ── Step 3: Get music recommendations ──────────────────────────
         songs = get_music_by_emotion(emotion)
 
         return {
             "emotion":       emotion,
             "confidence":    confidence,
-            "face_detected": True,
-            "all_emotions":  {k: round(v / 100.0, 4) for k, v in emotion_scores.items()},
+            "face_detected": face_detected,
+            "all_emotions":  all_emotions,
             "songs":         songs,
         }
 
