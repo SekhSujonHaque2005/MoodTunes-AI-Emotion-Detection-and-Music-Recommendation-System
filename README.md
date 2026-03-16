@@ -86,12 +86,6 @@ pip install -r requirements.txt
 
 ## 🚀 Running the Backend
 
-```bash
-python backend/app.py
-```
-
-The Flask server will start at `http://localhost:5000`.
-
 ---
 
 ## 🧠 Model Training
