@@ -3,6 +3,10 @@ import re
 import traceback
 import tempfile
 import os
+import numpy as np
+import requests
+import cv2
+import redis
 
 # ── IMPORTANT: Must import and load model BEFORE deepface/keras! ──
 try:
@@ -10,24 +14,60 @@ try:
 except ImportError:
     from model_loader import load_emotion_model, load_emotion_labels
 
-print("Loading custom emotion model...")
-# This applies the Keras 3 compat patch and loads the model
-emotion_model = load_emotion_model()
-idx_to_label = load_emotion_labels()
-# ──────────────────────────────────────────────────────────────────
+from pydantic import BaseModel
+from transformers import pipeline
 
-import numpy as np
-import cv2
-import requests
-from fastapi import FastAPI, UploadFile, File, HTTPException
+class TextRequest(BaseModel):
+    text: str
+    language: str = "Any"
+
+# Loading custom emotion model (Image/Webcam mode fallback)
+emotion_model = None
+idx_to_label = {}
+
+text_emotion_pipeline = None
+
+def get_text_pipeline():
+    global text_emotion_pipeline
+    if text_emotion_pipeline is None:
+        print("Initializing text emotion Transformer model...")
+        text_emotion_pipeline = pipeline(
+            "text-classification", 
+            model="bhadresh-savani/distilbert-base-uncased-emotion",
+            framework="pt"
+        )
+    return text_emotion_pipeline
+
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from deepface import DeepFace
+
+try:
+    from deepface import DeepFace
+    print("DeepFace loaded successfully.")
+except Exception as e:
+    print(f"WARNING: DeepFace failed to load: {e}")
+    DeepFace = None
+
+# Removed duplicate TextRequest
 
 app = FastAPI(
     title="Emotion Detection API",
     description="Hybrid pipeline: DeepFace for face detection, custom CNN for emotion classification.",
     version="3.0.0",
 )
+
+# ── Redis Caching Setup ──
+# Redis will store YouTube research results for 24 hours.
+# Connection is wrapped in a try-except to keep the app functional even without a Redis server.
+try:
+    redis_host = os.getenv("REDIS_HOST", "localhost")
+    redis_client = redis.Redis(host=redis_host, port=6379, db=0, decode_responses=True)
+    redis_client.ping()
+    print(f"Redis caching connected successfully to {redis_host}.")
+except Exception as e:
+    print(f"WARNING: Redis not connected. Caching disabled. Error: {e}")
+    redis_client = None
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -37,20 +77,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Load custom model & labels at startup ──────────────────────────────
-print("Loading custom emotion model...")
-emotion_model = load_emotion_model()
-idx_to_label = load_emotion_labels()
+# Load custom model & labels at startup with error protection
+try:
+    print("Initializing Visual Emotion Model...")
+    emotion_model = load_emotion_model()
+    idx_to_label = load_emotion_labels()
+except Exception as e:
+    print(f"WARNING: Visual model failed to load: {e}")
+    emotion_model = None
+    idx_to_label = {}
+
 
 # Emotion → YouTube search query
 EMOTION_QUERIES = {
-    "happy":    "happy upbeat feel good songs",
-    "sad":      "sad emotional healing songs",
-    "angry":    "motivational rock songs energy",
-    "neutral":  "chill relaxing background music",
-    "surprise": "feel good party music",
-    "fear":     "calming peaceful piano music",
-    "disgust":  "lofi hip hop chill beats",
+    "happy":    "happy upbeat pop",
+    "sad":      "sad emotional",
+    "angry":    "heavy aggressive",
+    "neutral":  "chill relaxing acoustic",
+    "surprise": "feel good party",
+    "fear":     "calming peaceful",
+    "disgust":  "moody atmospheric",
 }
 
 
@@ -73,6 +119,9 @@ def classify_emotion(face_pixels: np.ndarray):
     """Run the custom CNN model on a preprocessed face crop.
     Returns (emotion_label, confidence, all_emotions_dict).
     """
+    if emotion_model is None:
+        raise ValueError("The custom emotion CNN model (.h5) failed to load during server startup due to environment issues. Prediction aborted.")
+        
     processed = preprocess_face(face_pixels)
     predictions = emotion_model.predict(processed, verbose=0)[0]
 
@@ -89,9 +138,42 @@ def classify_emotion(face_pixels: np.ndarray):
     return emotion, confidence, all_emotions
 
 
-def get_music_by_emotion(emotion: str, limit: int = 5):
-    """Search YouTube for songs matching the detected emotion using plain requests."""
-    query = EMOTION_QUERIES.get(emotion, "top music")
+def get_music_by_emotion(emotion: str, limit: int = 5, language: str = "Any"):
+    """Search YouTube for songs matching the detected emotion, customized by language."""
+    
+    # If a specific local region/language is selected, we MUST use very simple keywords.
+    # Otherwise, YouTube's NLP engine will prioritize English genres (e.g. "pop", "acoustic") and ignore the language.
+    if language and language.strip() and language.lower() != "any":
+        simplified_keywords = {
+            "happy":    "happy",
+            "sad":      "sad",
+            "angry":    "angry",
+            "neutral":  "relaxing",
+            "surprise": "party",
+            "fear":     "calming",
+            "disgust":  "lofi",
+        }
+        keyword = simplified_keywords.get(emotion, emotion)
+        query = f"{language} {keyword} songs"
+    else:
+        # Default global English-focused queries
+        query = EMOTION_QUERIES.get(emotion, "top music")
+        
+    print(f"[DEBUG] Processing music request (Emotion: {emotion}, Region: {language})")
+
+    # ── Step 1: Check Redis Cache ──────
+    cache_key = f"yt_cache:{emotion}:{language.lower().replace(' ', '_')}"
+    if redis_client:
+        try:
+            cached_data = redis_client.get(cache_key)
+            if cached_data:
+                print(f"[CACHE HIT] Returning results from Redis for key: {cache_key}")
+                return json.loads(cached_data)
+        except Exception as e:
+            print(f"WARNING: Redis read error: {e}")
+
+    # ── Step 2: Scrape YouTube (Cache Miss) ──────
+    print(f"[CACHE MISS] Fetching fresh data from YouTube for query: '{query}'")
     url = "https://www.youtube.com/results"
     params = {"search_query": query}
     headers = {
@@ -147,6 +229,14 @@ def get_music_by_emotion(emotion: str, limit: int = 5):
             if len(songs) >= limit:
                 break
 
+        # ── Step 3: Store in Redis Cache (expires in 24 hours) ──────
+        if redis_client and songs:
+            try:
+                redis_client.setex(cache_key, 86400, json.dumps(songs))
+                print(f"[CACHE STORE] Saved {len(songs)} tracks to Redis for key: {cache_key}")
+            except Exception as e:
+                print(f"WARNING: Redis write error: {e}")
+
         return songs
     except Exception:
         traceback.print_exc()
@@ -164,8 +254,8 @@ def health():
 
 
 @app.post("/predict")
-async def predict(file: UploadFile = File(...)):
-    """Upload a face image → DeepFace face detection → custom CNN emotion → YouTube songs."""
+async def predict(file: UploadFile = File(...), language: str = Form("Any")):
+    """Upload a face image → DeepFace fallback → custom CNN emotion → YouTube songs."""
 
     tmp_path = None
     try:
@@ -213,7 +303,7 @@ async def predict(file: UploadFile = File(...)):
         emotion, confidence, all_emotions = classify_emotion(face_bgr)
 
         # ── Step 3: Get music recommendations ──────────────────────────
-        songs = get_music_by_emotion(emotion)
+        songs = get_music_by_emotion(emotion, language=language)
 
         return {
             "emotion":       emotion,
@@ -231,3 +321,44 @@ async def predict(file: UploadFile = File(...)):
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
+@app.post("/predict-text")
+async def predict_text(request: TextRequest):
+    """Analyze emotion from text using a Transformer model → YouTube songs."""
+    try:
+        text = request.text.strip()
+        if not text:
+            raise HTTPException(status_code=400, detail="Text cannot be empty")
+
+        # Transformer Inference (Lazy Load)
+        pipe = get_text_pipeline()
+        results = pipe(text)
+        # Result example: [{'label': 'joy', 'score': 0.99}]
+        raw_label = results[0]["label"]
+        confidence = round(float(results[0]["score"]), 4)
+
+        # Map Transformer labels to our system emotions
+        label_map = {
+            "joy": "happy",
+            "sadness": "sad",
+            "anger": "angry",
+            "fear": "fear",
+            "surprise": "surprise",
+            "love": "happy"
+        }
+        
+        emotion = label_map.get(raw_label, "neutral")
+
+        # Step 3: Get music recommendations
+        songs = get_music_by_emotion(emotion, language=request.language)
+
+        return {
+            "emotion":       emotion,
+            "raw_label":     raw_label,
+            "confidence":    confidence,
+            "text_analyzed": text,
+            "songs":         songs,
+        }
+
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))

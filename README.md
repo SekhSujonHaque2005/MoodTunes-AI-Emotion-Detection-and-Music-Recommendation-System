@@ -11,36 +11,39 @@
 
 ---
 
-## ✨ Features
-- 🎭 **Hybrid Emotion Detection Pipeline:** Uses DeepFace for precise face extraction and a Custom CNN for emotion classification.
-- 🎶 **Dynamic Music Recommendations:** Maps detected emotions to curated YouTube search playlists in real-time.
-- 🚀 **Asynchronous Backend:** Powered by FastAPI for lightning-fast inference and low-latency API responses.
-- 🎨 **Modern Frontend:** Built with Next.js, Tailwind CSS, and Framer Motion/GSAP animations.
+## ✨ Advanced Features
+
+-   🎭 **Hybrid Visual AI Pipeline**: Uses DeepFace for face extraction and a Custom CNN for emotion classification.
+-   🧠 **Transformer Sentiment Engine**: State-of-the-art NLP models analyze written thoughts to find hidden emotional depth.
+-   🎵 **Intelligent Music Mapping**: Real-time YouTube integration with **Global Regional Support** (Hindi, Bengali, etc.).
+-   ⚡ **Sub-second Delivery (Redis)**: Distributed caching ensures ultra-fast response times for frequent mood searches.
+-   📱 **Full PWA Experience**: Installable on mobile and desktop with offline support and app-like performance.
+-   📚 **Premium Documentation**: Full technical guides available at `/docs`.
 
 ---
 
-## 🛠️ Tech Stack
+## 🏗️ The Technical Architecture
+
+MoodTunes operates on a modern, distributed stack designed for speed and reliability:
+
+1.  **Ingestion**: Captured biometric pixels (Webcam/Upload) or Natural Language (Text).
+2.  **Engine Routing**: Proprietary CNN logic for visual data or HuggingFace Transformers for text sentiment.
+3.  **Neural Inference**: Classifying input into one of 7 distinct emotion layers with high confidence scoring.
+4.  **Optimized Fulfillment**: YouTube search fulfills recommendations, with **Redis** ensuring results are cached and reused efficiently.
+
+---
+
+## 🛠️ Stack Overview
 
 | Layer | Technology |
 |---|---|
-| **Frontend** | Next.js (React), TypeScript, Tailwind CSS |
-| **Backend** | FastAPI, Uvicorn, Python |
-| **AI / Machine Learning** | DeepFace, OpenCV, TensorFlow / Keras |
-| **External Integrations** | Real-time YouTube Search API (Scraping) |
+| **Frontend** | Next.js 15, TypeScript, Tailwind v4 |
+| **Backend** | FastAPI (Asynchronous), Python 3.10+ |
+| **AI Neural** | TensorFlow, Keras, HuggingFace Transformers |
+| **Performance** | Redis for Distributed Result Caching |
+| **DevOps** | Docker, Progressive Web App (PWA) |
 
 ---
-
-## 🧠 The Hybrid AI Architecture (How it Works)
-
-We use a custom two-step "Hybrid" pipeline for maximum accuracy and efficiency:
-
-1. **Face Extraction (DeepFace):** When an image is uploaded, the backend first uses DeepFace to scan the image, locate the bounding box of the human face, and crop it out. This removes background noise.
-2. **Emotion Classification (Custom CNN):** The cropped face is then pre-processed (converted to an RGB tensor, resized to 224x224, and normalized) and fed entirely into our Custom TensorFlow/Keras CNN (`emotion_model.h5`).
-3. **Music Mapping:** The dominant output emotion (Happy, Sad, Angry, Fear, Disgust, Surprise, Neutral) is used to search YouTube for matching music.
-
----
-
-## 🚀 How to Run the Project
 
 The project consists of two separate servers that need to run simultaneously: the Python Backend and the Next.js Frontend.
 

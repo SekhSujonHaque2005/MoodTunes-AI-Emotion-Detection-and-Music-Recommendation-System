@@ -1,503 +1,221 @@
 "use client";
 
-import { useRef, useState, useCallback } from "react";
-import type { Song, PredictResponse, InputMode, PlayerMode } from "./types";
+import Link from "next/link";
+import { useState } from "react";
+import {
+  Navbar,
+  NavBody,
+  NavItems,
+  NavbarLogo,
+  NavbarButton,
+  MobileNav,
+  MobileNavHeader,
+  MobileNavToggle,
+  MobileNavMenu
+} from "../components/ui/resizable-navbar";
+import { ThemeToggle } from "../components/theme-toggle";
+import { Footer } from "../components/Footer";
+import { PageTour } from "../components/PageTour";
 
-const API_BASE = "http://127.0.0.1:8000";
+export default function LandingPage() {
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
 
-const EMOTION_META: Record<string, { emoji: string; color: string; label: string }> = {
-  happy:    { emoji: "😊", color: "em-happy",    label: "Happy" },
-  sad:      { emoji: "😢", color: "em-sad",      label: "Sad" },
-  angry:    { emoji: "😠", color: "em-angry",    label: "Angry" },
-  neutral:  { emoji: "😐", color: "em-neutral",  label: "Neutral" },
-  surprise: { emoji: "😲", color: "em-surprise", label: "Surprised" },
-  fear:     { emoji: "😨", color: "em-fear",     label: "Fearful" },
-  disgust:  { emoji: "🤢", color: "em-disgust",  label: "Disgusted" },
-};
-
-const MINI_BAR_COLORS: Record<string, string> = {
-  happy:    "#fbbf24", sad:  "#60a5fa", angry:   "#f87171",
-  neutral:  "#94a3b8", fear: "#22d3ee", surprise: "#c084fc", disgust: "#34d399",
-};
-
-export default function Home() {
-  const [inputMode, setInputMode]     = useState<InputMode>("upload");
-  const [playerMode, setPlayerMode]   = useState<PlayerMode>("video");
-  const [previewUrl, setPreviewUrl]   = useState<string | null>(null);
-  const [imageFile, setImageFile]     = useState<File | null>(null);
-  const [loading, setLoading]         = useState(false);
-  const [result, setResult]           = useState<PredictResponse | null>(null);
-  const [activeSong, setActiveSong]   = useState<Song | null>(null);
-  const [error, setError]             = useState<string | null>(null);
-  const [webcamActive, setWebcamActive] = useState(false);
-  const [dragOver, setDragOver]       = useState(false);
-  const [toast, setToast]             = useState<string | null>(null);
-
-  const videoRef  = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3200);
-  };
-
-  const handleFile = (file: File) => {
-    if (!file.type.startsWith("image/")) { showToast("⚠️ Please upload an image file"); return; }
-    setImageFile(file);
-    setPreviewUrl(URL.createObjectURL(file));
-    setResult(null); setActiveSong(null); setError(null);
-  };
-
-  const onFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.[0]) handleFile(e.target.files[0]);
-  };
-
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault(); setDragOver(false);
-    if (e.dataTransfer.files?.[0]) handleFile(e.dataTransfer.files[0]);
-  };
-
-  const startWebcam = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      streamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
-      setWebcamActive(true);
-    } catch { showToast("❌ Camera access denied"); }
-  };
-
-  const stopWebcam = () => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    streamRef.current = null;
-    setWebcamActive(false);
-  };
-
-  const captureFrame = () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext("2d")!.drawImage(video, 0, 0);
-    canvas.toBlob((blob) => {
-      if (!blob) return;
-      const file = new File([blob], "webcam.jpg", { type: "image/jpeg" });
-      setImageFile(file);
-      setPreviewUrl(canvas.toDataURL("image/jpeg"));
-      setResult(null); setActiveSong(null); setError(null);
-      showToast("📸 Frame captured!");
-    }, "image/jpeg");
-  };
-
-  const predict = useCallback(async () => {
-    if (!imageFile) return;
-    setLoading(true); setError(null); setResult(null); setActiveSong(null);
-    try {
-      const form = new FormData();
-      form.append("file", imageFile);
-      const res = await fetch(`${API_BASE}/predict`, { method: "POST", body: form });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: "Server error" }));
-        throw new Error(err.detail || "Prediction failed");
-      }
-      const data: PredictResponse = await res.json();
-      setResult(data);
-      if (!data.face_detected) showToast("⚠️ No face detected — ensure your face is clearly visible");
-      if (data.songs.length > 0) setActiveSong(data.songs[0]);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Unknown error";
-      setError(msg); showToast("❌ " + msg);
-    } finally {
-      setLoading(false);
-    }
-  }, [imageFile]);
-
-  const meta = result ? (EMOTION_META[result.emotion] ?? { emoji: "🤔", color: "em-neutral", label: result.emotion }) : null;
+  const navItems = [
+    { name: "Features", link: "#features" },
+    { name: "Workflow", link: "#workflow" },
+    { name: "Technical", link: "#technical" },
+    { name: "Docs", link: "/docs" },
+    { name: "GitHub", link: "https://github.com" },
+  ];
 
   return (
     <>
-      {/* ── Animated Background ── */}
-      <div className="bg-scene">
-        <div className="bg-grid" />
-        <div className="orb orb-1" />
-        <div className="orb orb-2" />
-        <div className="orb orb-3" />
-        <div className="orb orb-4" />
+      <div className="bg-scene" />
+      <PageTour />
+      
+      <div className="landing-shell">
+        <Navbar>
+          {/* Desktop Nav */}
+          <NavBody>
+            <NavbarLogo id="tour-logo" className="relative">
+              <img src="/logo.png" alt="" className="h-8 w-auto object-contain mr-2" />
+              <span className="font-extrabold text-xl tracking-tight">MoodTunes</span>
+            </NavbarLogo>
+            <NavItems items={navItems} />
+            <div className="flex items-center gap-4">
+              <ThemeToggle />
+              <button id="tour-trigger" className="text-sm font-semibold hover:text-white transition-colors cursor-pointer">
+                Take a Tour
+              </button>
+              <NavbarButton href="/system" variant="primary">
+                Launch App
+              </NavbarButton>
+            </div>
+          </NavBody>
+
+          {/* Mobile Nav */}
+          <MobileNav>
+            <MobileNavHeader>
+              <NavbarLogo>
+                <img src="/logo.png" alt="" className="h-8 w-auto object-contain mr-2" />
+                <span className="font-extrabold text-xl tracking-tight">MoodTunes</span>
+              </NavbarLogo>
+              <div className="flex items-center gap-2">
+                <ThemeToggle />
+                <MobileNavToggle isOpen={isMobileOpen} onClick={() => setIsMobileOpen(!isMobileOpen)} />
+              </div>
+            </MobileNavHeader>
+            <MobileNavMenu isOpen={isMobileOpen} onClose={() => setIsMobileOpen(false)}>
+              {navItems.map((item) => (
+                <a key={item.name} href={item.link} className="text-lg font-medium py-2 text-neutral-900 dark:text-white" onClick={() => setIsMobileOpen(false)}>
+                  {item.name}
+                </a>
+              ))}
+              <div className="h-px w-full bg-neutral-200 dark:bg-neutral-800 my-2" />
+              <button 
+                onClick={() => {
+                  setIsMobileOpen(false);
+                  document.getElementById("tour-trigger")?.click();
+                }}
+                className="w-full text-left text-lg font-medium py-2 text-neutral-900 dark:text-white flex items-center justify-between"
+              >
+                Take a Tour
+                <span className="text-xs bg-blue-500/10 text-blue-500 px-2 py-0.5 rounded-full">New</span>
+              </button>
+              <NavbarButton href="/system" variant="primary" className="w-full mt-4">
+                Launch App
+              </NavbarButton>
+            </MobileNavMenu>
+          </MobileNav>
+        </Navbar>
+
+        <header className="hero-lp relative" id="tour-hero">
+          <h1>Music tuned to your soul.</h1>
+          <p>
+            Experience the next generation of music recommendation. 
+            Powered by advanced Emotion AI to map your <strong>facial expressions</strong> or <strong>written thoughts</strong> to the perfect soundtrack. Now with full support for <strong>regional languages</strong> like Hindi, Bengali, and more.
+          </p>
+          <div className="cta-group">
+            <Link href="/system" className="btn btn-primary">
+              Visual Detection
+            </Link>
+            <Link href="/text-music" className="btn btn-secondary">
+              Text Analysis
+            </Link>
+          </div>
+        </header>
+
+        <section id="features" className="section-lp">
+          <div className="section-header text-center">
+            <h2>Built for the Modern Listener.</h2>
+            <p>A sophisticated blend of Computer Vision and Content Discovery.</p>
+          </div>
+          
+          <div className="feature-grid">
+            <div className="feature-card relative" id="tour-visual">
+              <div className="feature-icon-wrap">
+                <img src="https://unpkg.com/lucide-static@latest/icons/camera.svg" alt="Camera" className="icon-white" />
+              </div>
+              <h3>Visual Emotion AI</h3>
+              <p>Custom-trained CNN to detect 7 distinct facial emotional states with biometric precision.</p>
+            </div>
+            <div className="feature-card relative" id="tour-text">
+              <div className="feature-icon-wrap">
+                <img src="https://unpkg.com/lucide-static@latest/icons/message-square.svg" alt="Text" className="icon-white" />
+              </div>
+              <h3>Text Sentiment Analysis</h3>
+              <p>State-of-the-art Transformer models analyze your words to find the hidden mood in your text.</p>
+            </div>
+            <div className="feature-card">
+              <div className="feature-icon-wrap">
+                <img src="https://unpkg.com/lucide-static@latest/icons/languages.svg" alt="Region" className="icon-white" />
+              </div>
+              <h3>Global Regional Support</h3>
+              <p>Personalized discovery across languages including Hindi, Bengali, Spanish, and English.</p>
+            </div>
+            <div className="feature-card">
+              <div className="feature-icon-wrap">
+                <img src="https://unpkg.com/lucide-static@latest/icons/smartphone.svg" alt="PWA" className="icon-white" />
+              </div>
+              <h3>Next-Gen PWA Experience</h3>
+              <p>Install MoodTunes on your device for a lightning-fast, app-like experience with offline support.</p>
+            </div>
+            <div className="feature-card">
+              <div className="feature-icon-wrap">
+                <img src="https://unpkg.com/lucide-static@latest/icons/zap.svg" alt="Performance" className="icon-white" />
+              </div>
+              <h3>Ultrafast Music Delivery</h3>
+              <p>Powered by Redis caching layers to ensure sub-second recommendation speeds site-wide.</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="section-lp">
+          <div className="section-header">
+            <h2>The Technical Blueprint.</h2>
+            <p>How we turn pixels into emotional intelligence.</p>
+          </div>
+
+          <div className="flow-container">
+            <div className="flow-step">
+              <div className="step-num">01</div>
+              <div className="step-content">
+                <h4>Multi-Modal Signal Acquisition</h4>
+                <p>Capturing high-resolution facial data via webcam or analyzing linguistic sentiment through raw text input.</p>
+              </div>
+            </div>
+            <div className="flow-step">
+              <div className="step-num">02</div>
+              <div className="step-content">
+                <h4>Neural Engine Selection</h4>
+                <p>Routing data to specialized AI architectures: CNNs for visual biometric data or Transformers for NLP sentiment.</p>
+              </div>
+            </div>
+            <div className="flow-step">
+              <div className="step-num">03</div>
+              <div className="step-content">
+                <h4>Deep Inference Logic</h4>
+                <p>Executing proprietary H5/Keras models or BERT-based pipelines to calculate confidence scores across emotion layers.</p>
+              </div>
+            </div>
+            <div className="flow-step">
+              <div className="step-num">04</div>
+              <div className="step-content">
+                <h4>Intelligent Music Mapping</h4>
+                <p>Scraping the global music database with sub-second delivery powered by a distributed Redis caching layer.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="section-lp relative" id="tour-tech">
+          <div className="section-header text-center">
+            <h2>Powered by Industry Standards.</h2>
+            <p>Leveraging a world-class technology stack for production-grade performance.</p>
+          </div>
+
+          <div className="tech-box">
+             <div className="tech-pill"><img src="https://cdn.simpleicons.org/nextdotjs/white" width="16" /> Next.js</div>
+             <div className="tech-pill"><img src="https://cdn.simpleicons.org/fastapi/white" width="16" /> FastAPI</div>
+             <div className="tech-pill"><img src="https://cdn.simpleicons.org/tensorflow/white" width="16" /> TensorFlow</div>
+             <div className="tech-pill"><img src="https://cdn.simpleicons.org/docker/white" width="16" /> Docker</div>
+             <div className="tech-pill"><img src="https://cdn.simpleicons.org/redis/white" width="16" /> Redis</div>
+             <div className="tech-pill"><img src="https://cdn.simpleicons.org/huggingface/white" width="16" /> Transformers</div>
+             <div className="tech-pill"><img src="https://cdn.simpleicons.org/opencv/white" width="16" /> OpenCV</div>
+             <div className="tech-pill"><img src="https://cdn.simpleicons.org/python/white" width="16" /> Python</div>
+             <div className="tech-pill"><img src="https://cdn.simpleicons.org/tailwindcss/white" width="16" /> Tailwind CSS</div>
+          </div>
+        </section>
+
+        <section className="section-lp text-center" style={{ borderBottom: "1px dashed var(--border)" }}>
+           <h2 style={{ fontSize: "3rem", marginBottom: "2rem" }}>Ready to explore?</h2>
+           <Link href="/system" className="btn btn-primary" style={{ padding: "1rem 3rem", fontSize: "1.1rem" }}>
+              Launch MoodTunes System
+           </Link>
+        </section>
+
+        <Footer />
       </div>
-
-      <div className="page-shell">
-        {/* ── Navbar ── */}
-        <nav className="navbar">
-          <div className="navbar-brand">
-            <div className="logo-icon">🎵</div>
-            <span className="logo-name">MoodTunes</span>
-            <span className="navbar-badge">AI Powered</span>
-          </div>
-          <div className="navbar-right">
-            <span className="status-chip">
-              <span className="live-dot" />
-              API Live
-            </span>
-            <span className="status-chip">🧠 DeepFace</span>
-            <span className="status-chip">▶ YouTube</span>
-          </div>
-        </nav>
-
-        <main className="main-container">
-          {/* ── Hero ── */}
-          <section className="hero">
-            <span className="hero-decor">🎧</span>
-            <span className="hero-decor">🎼</span>
-            <span className="hero-decor">✨</span>
-            <span className="hero-decor">🎵</span>
-
-            <div className="hero-eyebrow">
-              ✦ Emotion-Aware Music Intelligence
-            </div>
-            <h1>
-              <span className="grad">Detect Emotion.</span>
-              <br />
-              <span className="grad">Discover Music.</span>
-            </h1>
-            <p className="hero-sub">
-              Upload a photo or use your webcam — our AI reads your mood
-              and instantly surfaces the perfect soundtrack for your moment.
-            </p>
-          </section>
-
-          {/* ── Input + Result ── */}
-          <div className="grid-two">
-            {/* LEFT: Input Card */}
-            <div className="card">
-              <div className="card-title">🖼️ &nbsp;Face Input</div>
-
-              <div className="tabs">
-                <button
-                  className={`tab ${inputMode === "upload" ? "active" : ""}`}
-                  onClick={() => { setInputMode("upload"); if (webcamActive) stopWebcam(); }}
-                >
-                  📁 Upload
-                </button>
-                <button
-                  className={`tab ${inputMode === "webcam" ? "active" : ""}`}
-                  onClick={() => setInputMode("webcam")}
-                >
-                  📷 Webcam
-                </button>
-              </div>
-
-              {inputMode === "upload" ? (
-                <>
-                  {!previewUrl && (
-                    <div
-                      className={`upload-zone ${dragOver ? "drag-over" : ""}`}
-                      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                      onDragLeave={() => setDragOver(false)}
-                      onDrop={onDrop}
-                      onClick={() => document.getElementById("fileInput")?.click()}
-                      style={{ cursor: "pointer" }}
-                    >
-                      <div className="upload-icon-wrap">🖼️</div>
-                      <p><span>Click to upload</span> or drag &amp; drop</p>
-                      <p style={{ marginTop: 8, fontSize: "0.8rem", opacity: 0.5 }}>
-                        JPG · PNG · WEBP · GIF
-                      </p>
-                      <input 
-                        id="fileInput" 
-                        type="file" 
-                        accept="image/*" 
-                        onChange={onFileInput} 
-                        style={{ display: "none" }} 
-                      />
-                    </div>
-                  )}
-                  {previewUrl && (
-                    <div className="preview-container">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={previewUrl} alt="Preview" />
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  <div className={webcamActive ? "webcam-active" : ""}>
-                    <div className="webcam-container">
-                      <video ref={videoRef} autoPlay playsInline muted style={{ display: webcamActive ? "block" : "none" }} />
-                      {!webcamActive && (
-                        <div className="webcam-overlay">
-                          <span>📷</span>
-                          <p style={{ fontWeight: 600 }}>Camera not started</p>
-                          <p style={{ fontSize: "0.75rem", opacity: 0.5 }}>Position your face clearly in frame</p>
-                        </div>
-                      )}
-                      <div className="webcam-bracket tl" />
-                      <div className="webcam-bracket tr" />
-                      <div className="webcam-bracket bl" />
-                      <div className="webcam-bracket br" />
-                    </div>
-                  </div>
-                  <canvas ref={canvasRef} style={{ display: "none" }} />
-                  {previewUrl && inputMode === "webcam" && (
-                    <div className="preview-container" style={{ marginTop: "0.85rem", height: 90 }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={previewUrl} alt="Captured" style={{ objectFit: "cover" }} />
-                      <div style={{
-                        position: "absolute", bottom: 8, right: 8,
-                        background: "rgba(124,58,237,0.8)", backdropFilter: "blur(8px)",
-                        padding: "2px 8px", borderRadius: 20, fontSize: "0.68rem",
-                        color: "#fff", fontWeight: 600, zIndex: 2,
-                      }}>
-                        📸 CAPTURED
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Action Buttons */}
-              <div className="btn-group">
-                {inputMode === "webcam" && !webcamActive && (
-                  <button className="btn btn-secondary" onClick={startWebcam}>📷 Start Camera</button>
-                )}
-                {inputMode === "webcam" && webcamActive && (
-                  <>
-                    <button className="btn btn-primary" onClick={captureFrame}>📸 Capture</button>
-                    <button className="btn btn-danger" onClick={stopWebcam}>⏹ Stop</button>
-                  </>
-                )}
-                {inputMode === "upload" && previewUrl && (
-                  <button
-                    className="btn btn-secondary btn-icon"
-                    onClick={() => { setPreviewUrl(null); setImageFile(null); setResult(null); setActiveSong(null); }}
-                    title="Remove image"
-                  >✕</button>
-                )}
-                <button
-                  className="btn btn-primary"
-                  onClick={predict}
-                  disabled={!imageFile || loading}
-                  style={{ flex: 1, justifyContent: "center" }}
-                >
-                  {loading
-                    ? <><span className="spinner" /> Analyzing…</>
-                    : "🔍 Detect Emotion"}
-                </button>
-              </div>
-            </div>
-
-            {/* RIGHT: Emotion Result */}
-            <div className="card">
-              <div className="card-title">🎭 &nbsp;Emotion Analysis</div>
-
-              {!result && !loading && !error && (
-                <div className="empty-state">
-                  <div className="empty-icon">🎭</div>
-                  <p>Upload a photo and click<br /><strong>Detect Emotion</strong> to get started</p>
-                </div>
-              )}
-
-              {loading && (
-                <div className="analyzing-wrap">
-                  <div className="analyzing-brain">🧠</div>
-                  <div>
-                    <div className="analyzing-text">Reading your expression</div>
-                    <div className="analyzing-dots">
-                      <span>.</span><span>.</span><span>.</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {error && !loading && (
-                <div className="empty-state">
-                  <div className="empty-icon">❌</div>
-                  <p style={{ color: "var(--red)" }}>{error}</p>
-                </div>
-              )}
-
-              {result && meta && !loading && (
-                <div className="emotion-result-card">
-                  <div className={`emotion-emoji-wrap ${meta.color}`}>
-                    <div className={`emotion-glow-ring glow-ring`} />
-                    <div className="emotion-emoji">{meta.emoji}</div>
-                  </div>
-
-                  <div className={`emotion-badge ${meta.color}`}>
-                    {meta.emoji} {meta.label.toUpperCase()}
-                  </div>
-
-                  <div className="confidence-bar-wrap">
-                    <div className="confidence-label">
-                      <span>Confidence</span>
-                      <span style={{ fontWeight: 700 }}>{(result.confidence * 100).toFixed(1)}%</span>
-                    </div>
-                    <div className="confidence-bar">
-                      <div className="confidence-fill" style={{ width: `${result.confidence * 100}%` }} />
-                    </div>
-                  </div>
-
-                  {result.all_emotions && (
-                    <div className="emotions-breakdown">
-                      <div className="breakdown-label">All Emotions</div>
-                      {Object.entries(result.all_emotions)
-                        .sort((a, b) => b[1] - a[1])
-                        .map(([em, score]) => (
-                          <div key={em} className="emotion-row">
-                            <div className="emotion-row-header">
-                              <span style={{
-                                color: em === result.emotion ? MINI_BAR_COLORS[em] || "var(--accent-3)" : "var(--text-secondary)",
-                                fontWeight: em === result.emotion ? 700 : 400,
-                                fontSize: "0.77rem",
-                              }}>
-                                {EMOTION_META[em]?.emoji} {em}
-                              </span>
-                              <span style={{ color: "var(--text-muted)", fontSize: "0.73rem" }}>
-                                {(score * 100).toFixed(1)}%
-                              </span>
-                            </div>
-                            <div className="emotion-mini-bar">
-                              <div
-                                className="emotion-mini-fill"
-                                style={{
-                                  width: `${score * 100}%`,
-                                  background: em === result.emotion
-                                    ? MINI_BAR_COLORS[em] || "var(--accent)"
-                                    : "rgba(255,255,255,0.1)",
-                                  boxShadow: em === result.emotion
-                                    ? `0 0 8px ${MINI_BAR_COLORS[em]}40`
-                                    : "none",
-                                }}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  )}
-
-                  {!result.face_detected && (
-                    <div className="warn-banner">
-                      ⚠️ No face detected — result may be inaccurate. Make sure your face fills most of the frame.
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ── Music Section ── */}
-          {result && result.songs.length > 0 && (
-            <div className="grid-two" style={{ marginTop: "1.5rem" }}>
-              {/* Song List */}
-              <div className="card">
-                <div className="card-title">🎵 &nbsp;Recommended Tracks</div>
-                <div className="section-header">
-                  <span className="section-title">For your {meta?.emoji} mood</span>
-                  <span className="section-badge">{result.songs.length} tracks</span>
-                </div>
-                <div className="song-list">
-                  {result.songs.map((song) => (
-                    <div
-                      key={song.video_id}
-                      className={`song-item ${activeSong?.video_id === song.video_id ? "active" : ""}`}
-                      onClick={() => setActiveSong(song)}
-                    >
-                      <div className="song-thumb-wrap">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={song.thumbnail} alt={song.title} className="song-thumb" />
-                        <div className="song-thumb-overlay">▶</div>
-                      </div>
-                      <div className="song-info">
-                        <div className="song-title">{song.title}</div>
-                        <div className="song-channel">{song.channel}</div>
-                      </div>
-                      <div style={{ flexShrink: 0 }}>
-                        {song.duration && <span className="song-duration">{song.duration}</span>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Player */}
-              <div className="card">
-                <div className="card-title">▶ &nbsp;Now Playing</div>
-                {activeSong ? (
-                  <>
-                    <div className="player-mode-toggle">
-                      <button className={`mode-btn ${playerMode === "video" ? "active" : ""}`} onClick={() => setPlayerMode("video")}>
-                        🎬 Video
-                      </button>
-                      <button className={`mode-btn ${playerMode === "audio" ? "active" : ""}`} onClick={() => setPlayerMode("audio")}>
-                        🎵 Audio Only
-                      </button>
-                    </div>
-
-                    {playerMode === "video" ? (
-                      <div className="player-embed">
-                        <iframe
-                          key={activeSong.video_id}
-                          src={`https://www.youtube.com/embed/${activeSong.video_id}?autoplay=1`}
-                          allow="autoplay; encrypted-media"
-                          allowFullScreen
-                          title={activeSong.title}
-                        />
-                      </div>
-                    ) : (
-                      <div className="audio-only-player">
-                        <div className="now-playing-title">{activeSong.title}</div>
-                        <div style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: 4 }}>
-                          {activeSong.channel}
-                        </div>
-                        <div className="audio-visualizer">
-                          {[20, 36, 52, 44, 60, 48, 34, 22].map((h, i) => (
-                            <div key={i} className="viz-bar" style={{ height: h }} />
-                          ))}
-                        </div>
-                        <iframe
-                          key={`audio-${activeSong.video_id}`}
-                          src={`https://www.youtube.com/embed/${activeSong.video_id}?autoplay=1`}
-                          allow="autoplay; encrypted-media"
-                          title="audio"
-                          style={{ width: 0, height: 0, border: "none" }}
-                        />
-                        <button className="btn btn-secondary" style={{ margin: "0 auto", display: "flex" }} onClick={() => setPlayerMode("video")}>
-                          🎬 Show Video
-                        </button>
-                      </div>
-                    )}
-
-                    <div style={{ marginTop: "1rem" }}>
-                      <a
-                        href={`https://www.youtube.com/watch?v=${activeSong.video_id}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="yt-link"
-                      >
-                        ↗ Open on YouTube
-                      </a>
-                    </div>
-                  </>
-                ) : (
-                  <div className="empty-state">
-                    <div className="empty-icon">▶</div>
-                    <p>Select a song to start playing</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </main>
-
-        {/* ── Footer ── */}
-        <footer className="footer">
-          MoodTunes — AI Emotion Detection &amp; Music Recommendation &nbsp;·&nbsp;
-          Built with <span>Next.js</span> + <span>FastAPI</span> + <span>DeepFace</span>
-        </footer>
-      </div>
-
-      {/* ── Toast ── */}
-      {toast && <div className="toast">{toast}</div>}
     </>
   );
 }

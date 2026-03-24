@@ -73,7 +73,11 @@ def load_emotion_model():
     except Exception as e:
         print(f"Warning: Failed to ensure H5 patch ({e}).")
 
-    from tensorflow.keras.models import load_model
+    try:
+        from tf_keras.models import load_model
+    except ImportError:
+        from tensorflow.keras.models import load_model
+    
     model = load_model(MODEL_PATH, compile=False)
     print(f"Emotion model loaded. Input: {model.input_shape}, Output: {model.output_shape}")
     return model

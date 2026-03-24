@@ -7,102 +7,72 @@ This document describes the high-level architecture of the Emotion Detection and
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        User Interface                           │
-│                    (Next.js Frontend)                           │
-│           Webcam Feed │ Music Player │ Emotion Display          │
-└──────────────────────┬──────────────────────────────────────────┘
-                       │ HTTP Requests
-                       ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                      Flask Backend (API)                        │
-│                       backend/app.py                            │
-│                                                                 │
-│   ┌─────────────────────┐   ┌───────────────────────────────┐  │
-│   │  Emotion Detection  │   │  Music Recommendation Engine  │  │
-│   │  (OpenCV + CNN)     │   │  (Spotipy / Spotify API)      │  │
-│   └─────────┬───────────┘   └───────────────────────────────┘  │
-└─────────────┼───────────────────────────────────────────────────┘
-              │
-              ▼
-┌─────────────────────────────┐
-│   Trained CNN Model         │
-│   models/emotion_model.h5   │
-│   (TensorFlow / Keras)      │
-│   Trained on FER2013        │
-└─────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│                          User Interface                           │
+│                      (Next.js App Router)                         │
+│           Webcam Feed │ Text Input │ Language Preferences         │
+└───────────────────────┬───────────────────────────────────────────┘
+                        │ REST API (JSON / FormData)
+                        ▼
+┌───────────────────────────────────────────────────────────────────┐
+│                        FastAPI Backend                            │
+│                         backend/app.py                            │
+│                                                                   │
+│   ┌────────────────────┐   ┌─────────────────┐   ┌────────────┐   │
+│   │ Visual AI Pipeline │   │ Text AI Pipeline│   │ Music API  │   │
+│   │ (DeepFace + CNN)   │   │ (DistilBERT)    │   │ (YouTube)  │   │
+│   └─────────┬──────────┘   └────────┬────────┘   └────────────┘   │
+└─────────────┼───────────────────────┼───────────────────────────────┘
+              │                       │
+              ▼                       ▼
+┌─────────────────────────┐  ┌─────────────────────────┐
+│   Trained CNN Model     │  │   Transformer Model     │
+│   emotion_model.h5      │  │   HuggingFace NLP       │
+│   (FER2013 Dataset)     │  │   (Lazy Loaded)         │
+└─────────────────────────┘  └─────────────────────────┘
 ```
 
 ---
 
 ## Component Breakdown
 
-### 1. Frontend (Next.js)
-- Captures video from the user's webcam
-- Sends frames to the backend for emotion analysis
-- Displays detected emotion and recommended music/playlist
-- Music player for streaming recommendations
+### 1. Robust Frontend (Next.js v14+)
+- **Visual Module**: Captures raw video from the user's webcam or file upload, and posts binary image data to the backend.
+- **Texting Module**: Highly responsive text-field interface for natural language sentiment input.
+- **Interactivity**: Implements region-specific queries (Language dropdown) and modern UI loaders (`OrbitalLoader`) using `framer-motion` to keep a smooth user experience during inference wait times.
 
-### 2. Backend (Flask)
-- Receives image frames from the frontend via REST API
-- Preprocesses frames using OpenCV (grayscale, resize to 48×48)
-- Runs inference using the trained emotion detection model
-- Calls the Spotify API via Spotipy to fetch mood-matched playlists
-- Returns emotion label and music recommendations to the frontend
+### 2. High-Performance API (FastAPI)
+*Upgraded from Flask to FastAPI for out-of-the-box asynchronous concurrency and automatic OpenAPI serialization.*
+- Receives HTTP payload via two main endpoints: `/predict` and `/predict-text`.
+- **Optimization Strategy**: Employs "Lazy Loading" on massive NLP models so the server boots up near-instantly, only provisioning Transformer pipelines on first use.
 
-### 3. Emotion Detection Model (CNN)
-- Architecture: Convolutional Neural Network (CNN)
-- Framework: TensorFlow / Keras
-- Dataset: FER2013 (7 emotion classes)
-- Input: 48×48 grayscale facial image
-- Output: Probability distribution over 7 emotions
+### 3. Visual Emotion Detection (Hybrid CNN Pipeline)
+- **Face Extraction Engine (DeepFace / OpenCV)**: Ensures the bounding box of the face is cleanly separated from busy backgrounds before mathematical inference occurs.
+- **Custom Classifier (TensorFlow / Keras)**: A custom Convolutional Neural Network natively trained on the FER2013 dataset. It receives the 48x48 cropped face and predicts a probability distribution spanning 7 distinct emotional domains.
 
-### 4. Music Recommendation Engine (Spotipy)
-- Maps detected emotion to a music mood/genre
-- Fetches relevant playlists or tracks from Spotify
-- Returns track list to the frontend
+### 4. Text Emotion Detection (HuggingFace Transformer)
+- **Architecture**: DistilBERT (`bhadresh-savani/distilbert-base-uncased-emotion`).
+- **Advantage**: A robust, context-aware NLP model capable of parsing highly nuanced syntax. Capable of extrapolating underlying sadness or joy out of ambiguous sentences far better than heuristic polarity scoring like TextBlob.
 
----
-
-## Data Flow
-
-```
-Webcam → Frontend
-       → POST /predict (image frame)
-       → Backend: OpenCV preprocess → CNN model → emotion label
-       → Backend: emotion label → Spotipy → playlist/tracks
-       → Response: { emotion, tracks }
-       → Frontend: display emotion + play music
-```
-
----
-
-## Emotion → Music Mood Mapping
-
-| Detected Emotion | Music Mood / Genre        |
-|------------------|---------------------------|
-| Happy            | Pop, Upbeat               |
-| Sad              | Acoustic, Blues           |
-| Angry            | Rock, Metal               |
-| Neutral          | Chill, Ambient            |
-| Surprise         | Electronic, Dance         |
-| Fear             | Instrumental, Calm        |
-| Disgust          | Jazz, Lo-fi               |
+### 5. Dynamic Music Recommendation Engine
+- Maps extracted emotional vectors into carefully selected musical genres (e.g., "Sad" → "Acoustic / Emotional").
+- Concatenates the user's explicit Regional Language preference (e.g., "Hindi") directly against the emotion keyword.
+- Executes real-time web scraping against YouTube to pull live embedded video/audio, ensuring continuous access to billions of tracks without relying on stringent OAuth integrations.
 
 ---
 
 ## Technology Stack Summary
 
-| Component          | Technology               |
-|--------------------|--------------------------|
-| Frontend           | Next.js (React)          |
-| Backend API        | Flask (Python)           |
-| Computer Vision    | OpenCV                   |
-| Deep Learning      | TensorFlow / Keras       |
-| Music API          | Spotipy (Spotify)        |
-| Model Training     | Jupyter Notebook         |
-| Dataset            | FER2013                  |
+| Component          | Technology                           |
+|--------------------|--------------------------------------|
+| **Frontend UI**    | Next.js (React), Tailwind CSS, Framer|
+| **Backend API**    | FastAPI (Python), Uvicorn            |
+| **Visual Core**    | OpenCV, DeepFace                     |
+| **Deep Learning**  | TensorFlow / Keras (CNN)             |
+| **NLP Core**       | Transformers (PyTorch), DistilBERT   |
+| **Music Domain**   | YouTube Data Request Crawler         |
+| **Model Datasets** | FER2013                              |
 
 ---
 
-*Architecture diagram will be updated as the system evolves.*
+*Architecture accurately reflects the modern Hybrid V3 update.*
