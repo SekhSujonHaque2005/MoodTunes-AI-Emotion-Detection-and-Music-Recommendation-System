@@ -60,10 +60,10 @@ app = FastAPI(
 # Redis will store YouTube research results for 24 hours.
 # Connection is wrapped in a try-except to keep the app functional even without a Redis server.
 try:
-    redis_host = os.getenv("REDIS_HOST", "localhost")
-    redis_client = redis.Redis(host=redis_host, port=6379, db=0, decode_responses=True)
+    redis_url = os.getenv("REDIS_URL", f"redis://{os.getenv('REDIS_HOST', 'localhost')}:6379/0")
+    redis_client = redis.from_url(redis_url, decode_responses=True)
     redis_client.ping()
-    print(f"Redis caching connected successfully to {redis_host}.")
+    print(f"Redis caching connected successfully.")
 except Exception as e:
     print(f"WARNING: Redis not connected. Caching disabled. Error: {e}")
     redis_client = None
