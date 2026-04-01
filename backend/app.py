@@ -30,7 +30,9 @@ text_emotion_pipeline = None
 def get_text_pipeline():
     global text_emotion_pipeline
     if text_emotion_pipeline is None:
-        print("Initializing text emotion Transformer model...")
+        print("Initializing heavy text transformer model (Lazy Load)...")
+        # Pre-importing inside function to save global memory
+        from transformers import pipeline
         text_emotion_pipeline = pipeline(
             "text-classification", 
             model="bhadresh-savani/distilbert-base-uncased-emotion",
@@ -77,15 +79,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Load custom model & labels at startup with error protection
-try:
-    print("Initializing Visual Emotion Model...")
-    emotion_model = load_emotion_model()
-    idx_to_label = load_emotion_labels()
-except Exception as e:
-    print(f"WARNING: Visual model failed to load: {e}")
-    emotion_model = None
-    idx_to_label = {}
+def get_emotion_engine():
+    global emotion_model, idx_to_label
+    if emotion_model is None:
+        print("Initializing Visual Emotion Engine (Lazy Load)...")
+        try:
+            emotion_model = load_emotion_model()
+            idx_to_label = load_emotion_labels()
+        except Exception as e:
+            print(f"CRITICAL: Failed to load .h5 model: {e}")
+    return emotion_model, idx_to_label
+
+# DeepFace will be lazy-loaded within the functions that need it to prevent global memory bloat.
 
 
 # Emotion → YouTube search query
@@ -116,23 +121,22 @@ def preprocess_face(face_pixels: np.ndarray) -> np.ndarray:
 
 
 def classify_emotion(face_pixels: np.ndarray):
-    """Run the custom CNN model on a preprocessed face crop.
-    Returns (emotion_label, confidence, all_emotions_dict).
-    """
-    if emotion_model is None:
-        raise ValueError("The custom emotion CNN model (.h5) failed to load during server startup due to environment issues. Prediction aborted.")
+    """Run the custom CNN model on a preprocessed face crop."""
+    engine, labels = get_emotion_engine()
+    if engine is None:
+        raise ValueError("AI Model failed to initialize. Try again in a few seconds.")
         
     processed = preprocess_face(face_pixels)
-    predictions = emotion_model.predict(processed, verbose=0)[0]
+    predictions = engine.predict(processed, verbose=0)[0]
 
-    # Build emotion scores dict
+    # Build emotion scores
     all_emotions = {}
     for idx, score in enumerate(predictions):
-        label = idx_to_label.get(idx, f"unknown_{idx}")
+        label = labels.get(idx, f"unknown_{idx}")
         all_emotions[label] = round(float(score), 4)
 
     predicted_idx = int(np.argmax(predictions))
-    emotion = idx_to_label.get(predicted_idx, "neutral")
+    emotion = labels.get(predicted_idx, "neutral")
     confidence = round(float(predictions[predicted_idx]), 4)
 
     return emotion, confidence, all_emotions
@@ -273,9 +277,10 @@ async def predict(file: UploadFile = File(...), language: str = Form("Any")):
             tmp_path = tmp.name
             cv2.imwrite(tmp_path, img)
 
-        # ── Step 1: Use DeepFace to detect & extract face regions ──────
+        # ── Step 1: Use DeepFace (Lazy Import) ──────
         face_detected = True
         try:
+            from deepface import DeepFace
             faces = DeepFace.extract_faces(
                 img_path=tmp_path,
                 detector_backend="opencv",
