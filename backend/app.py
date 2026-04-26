@@ -171,63 +171,39 @@ def get_music_by_emotion(emotion: str, limit: int = 5, language: str = "Any"):
         except Exception as e:
             print(f"WARNING: Redis read error: {e}")
 
-    # ── Step 2: Scrape YouTube (Cache Miss) ──────
+    # ── Step 2: Scrape YouTube with yt-dlp (Cache Miss) ──────
     print(f"[CACHE MISS] Fetching fresh data from YouTube for query: '{query}'")
-    url = "https://www.youtube.com/results"
-    params = {"search_query": query}
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/122.0.0.0 Safari/537.36"
-        ),
-        "Accept-Language": "en-US,en;q=0.9",
-    }
-
+    
     try:
-        response = requests.get(url, params=params, headers=headers, timeout=10)
-        response.raise_for_status()
-
-        match = re.search(r"var ytInitialData = ({.*?});</script>", response.text, re.DOTALL)
-        if not match:
-            return []
-
-        data = json.loads(match.group(1))
-        contents = (
-            data.get("contents", {})
-            .get("twoColumnSearchResultsRenderer", {})
-            .get("primaryContents", {})
-            .get("sectionListRenderer", {})
-            .get("contents", [])
-        )
-
+        import yt_dlp
+        import datetime
+        
+        ydl_opts = {
+            'quiet': True,
+            'extract_flat': True,
+            'force_generic_extractor': False,
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            # ytsearch5: guarantees we pull exactly the limit number of videos
+            result = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
+        
         songs = []
-        for section in contents:
-            items = section.get("itemSectionRenderer", {}).get("contents", [])
-            for item in items:
-                video = item.get("videoRenderer")
-                if not video:
-                    continue
-                video_id  = video.get("videoId", "")
-                title     = video.get("title", {}).get("runs", [{}])[0].get("text", "")
-                channel   = video.get("ownerText", {}).get("runs", [{}])[0].get("text", "")
-                duration  = video.get("lengthText", {}).get("simpleText", "")
-                thumbs    = video.get("thumbnail", {}).get("thumbnails", [])
-                thumbnail = thumbs[-1]["url"] if thumbs else ""
-
-                if video_id and title:
-                    songs.append({
-                        "title":     title,
-                        "video_id":  video_id,
-                        "thumbnail": thumbnail,
-                        "channel":   channel,
-                        "duration":  duration,
-                    })
-                    if len(songs) >= limit:
-                        break
-            if len(songs) >= limit:
-                break
-
+        if 'entries' in result:
+            for entry in result['entries']:
+                # Format duration to MM:SS
+                duration_sec = int(float(entry.get('duration', 0) or 0))
+                duration_str = str(datetime.timedelta(seconds=duration_sec)) if duration_sec > 0 else ""
+                if duration_str.startswith("0:"): 
+                    duration_str = duration_str[2:] # Strip leading hours if zero
+                
+                songs.append({
+                    "title": entry.get('title'),
+                    "video_id": entry.get('id'),
+                    "thumbnail": f"https://img.youtube.com/vi/{entry.get('id')}/hqdefault.jpg",
+                    "channel": entry.get('uploader'),
+                    "duration": duration_str
+                })
+        
         # ── Step 3: Store in Redis Cache (expires in 24 hours) ──────
         if redis_client and songs:
             try:
@@ -237,7 +213,7 @@ def get_music_by_emotion(emotion: str, limit: int = 5, language: str = "Any"):
                 print(f"WARNING: Redis write error: {e}")
 
         return songs
-    except Exception:
+    except Exception as e:
         traceback.print_exc()
         return []
 
