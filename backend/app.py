@@ -8,14 +8,13 @@ import requests
 import cv2
 import redis
 
-# ── IMPORTANT: Must import and load model BEFORE deepface/keras! ──
 try:
     from backend.model_loader import load_emotion_model, load_emotion_labels
 except ImportError:
     from model_loader import load_emotion_model, load_emotion_labels
 
 from pydantic import BaseModel
-from transformers import pipeline
+
 
 class TextRequest(BaseModel):
     text: str
@@ -43,12 +42,8 @@ def get_text_pipeline():
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-try:
-    from deepface import DeepFace
-    print("DeepFace loaded successfully.")
-except Exception as e:
-    print(f"WARNING: DeepFace failed to load: {e}")
-    DeepFace = None
+
+
 
 # Removed duplicate TextRequest
 
