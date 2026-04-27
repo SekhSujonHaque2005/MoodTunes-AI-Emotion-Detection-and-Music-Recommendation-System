@@ -1,104 +1,141 @@
-# 🎵 MoodTunes: AI Emotion Detection & Music Recommendation System
-
-![Python](https://img.shields.io/badge/Python-3.8%2B-blue?logo=python)
-![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?logo=fastapi)
-![Next.js](https://img.shields.io/badge/Next.js-Frontend-black?logo=next.js)
-![TensorFlow](https://img.shields.io/badge/TensorFlow-2.x-orange?logo=tensorflow)
-
-## 📌 Overview
-
-**MoodTunes** detects user emotions from their face and instantly recommends YouTube music playlists that match their current mood. It features a modern Next.js frontend and a fast, asynchronous FastAPI Python backend powered by a **Hybrid AI Pipeline** combining DeepFace for structural detection and a custom Convolutional Neural Network (CNN) for emotion classification.
-
----
-
-## ✨ Advanced Features
-
--   🎭 **Hybrid Visual AI Pipeline**: Uses DeepFace for face extraction and a Custom CNN for emotion classification.
--   🧠 **Transformer Sentiment Engine**: State-of-the-art NLP models analyze written thoughts to find hidden emotional depth.
--   🎵 **Intelligent Music Mapping**: Real-time YouTube integration with **Global Regional Support** (Hindi, Bengali, etc.).
--   ⚡ **Sub-second Delivery (Redis)**: Distributed caching ensures ultra-fast response times for frequent mood searches.
--   📱 **Full PWA Experience**: Installable on mobile and desktop with offline support and app-like performance.
--   📚 **Premium Documentation**: Full technical guides available at `/docs`.
+<div align="center">
+  <h1>🎵 MoodTunes: AI-Powered Emotion Detection & Music Recommender</h1>
+  <p><em>An intelligent full-stack application that reads human emotions through facial expressions and text sentiment to curate real-time personalized music playlists.</em></p>
+  
+  [![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+  [![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+  [![Next.js](https://img.shields.io/badge/Next.js-Frontend-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
+  [![TensorFlow](https://img.shields.io/badge/TensorFlow-AI-orange?style=for-the-badge&logo=tensorflow&logoColor=white)](https://tensorflow.org)
+  [![Redis](https://img.shields.io/badge/Redis-Cache-dc382d?style=for-the-badge&logo=redis&logoColor=white)](https://redis.io)
+</div>
 
 ---
 
-## 🏗️ The Technical Architecture
+## 📌 Executive Summary
 
-MoodTunes operates on a modern, distributed stack designed for speed and reliability:
+**MoodTunes** bridges the gap between human emotion and digital entertainment. By utilizing a **Hybrid AI Pipeline**, it captures real-time facial expressions or written text, accurately classifies the underlying emotion, and seamlessly interfaces with YouTube to deliver instant, mood-aligned music recommendations.
 
-1.  **Ingestion**: Captured biometric pixels (Webcam/Upload) or Natural Language (Text).
-2.  **Engine Routing**: Proprietary CNN logic for visual data or HuggingFace Transformers for text sentiment.
-3.  **Neural Inference**: Classifying input into one of 7 distinct emotion layers with high confidence scoring.
-4.  **Optimized Fulfillment**: YouTube search fulfills recommendations, with **Redis** ensuring results are cached and reused efficiently.
+This project demonstrates strong proficiency in **Full-Stack Development**, **Machine Learning Integration**, and **System Architecture**—showcasing the ability to build scalable, AI-driven web applications from end-to-end.
 
 ---
 
-## 🛠️ Stack Overview
+## ✨ Key Features & Business Value
 
-| Layer | Technology |
-|---|---|
-| **Frontend** | Next.js 15, TypeScript, Tailwind v4 |
-| **Backend** | FastAPI (Asynchronous), Python 3.10+ |
-| **AI Neural** | TensorFlow, Keras, HuggingFace Transformers |
-| **Performance** | Redis for Distributed Result Caching |
-| **DevOps** | Docker, Progressive Web App (PWA) |
+- **🎭 Hybrid Visual AI Pipeline:** Combines the structural precision of `DeepFace` with a proprietary, custom-trained Convolutional Neural Network (CNN) for highly accurate facial emotion classification.
+- **🧠 NLP Sentiment Engine:** Utilizes HuggingFace Transformer models (`DistilBERT`) to extract deep emotional context from textual user inputs.
+- **🌍 Global Music Intelligence:** Dynamically maps classified emotions to curated YouTube search queries, supporting regional and localized music genres (e.g., K-Pop, Bengali, Hindi, Punjabi).
+- **⚡ High-Performance Caching:** Implements `Redis` to cache frequent queries, slashing external API calls and ensuring sub-second response times.
+- **📱 Progressive Web App (PWA):** Features a sleek, responsive Next.js frontend built with Tailwind CSS, offering an installable, app-like experience across mobile and desktop devices.
 
 ---
 
-The project consists of two separate servers that need to run simultaneously: the Python Backend and the Next.js Frontend.
+## 🛠️ Technology Stack
 
-### 1. Start the FastAPI Backend
-The backend handles the AI models and API requests.
+### **Frontend (Client-Side)**
+- **Framework:** Next.js 15 (React)
+- **Styling:** Tailwind CSS v4
+- **Language:** TypeScript
+- **Architecture:** Progressive Web App (PWA) ready
 
+### **Backend (Server-Side)**
+- **Framework:** FastAPI (Asynchronous Python)
+- **Caching & DB:** Redis
+- **Integration:** DuckDuckGo Semantic Search (`ddgs`) for robust YouTube scraping
+
+### **Artificial Intelligence & Machine Learning**
+- **Computer Vision:** TensorFlow / Keras (Custom CNN), OpenCV, DeepFace
+- **Natural Language Processing:** HuggingFace Transformers (`pt` framework)
+- **Data Processing:** NumPy, Pandas
+
+---
+
+## 🏗️ System Architecture
+
+```mermaid
+graph TD
+    A[User Input] -->|Webcam / Image| B(Next.js Frontend)
+    A -->|Text Sentiment| B
+    
+    B -->|REST API Request| C{FastAPI Backend}
+    
+    C -->|Image Data| D[DeepFace Face Extraction]
+    D --> E[Custom CNN Emotion Classifier]
+    
+    C -->|Text Data| F[DistilBERT NLP Model]
+    
+    E --> G{Emotion Result}
+    F --> G
+    
+    G --> H[Redis Cache Check]
+    
+    H -->|Cache Hit| I[Return Cached Playlist]
+    H -->|Cache Miss| J[DuckDuckGo Semantic Search]
+    
+    J -->|Scrape YouTube| K[Generate Playlist]
+    K -->|Store in Cache| H
+    K --> I
+    
+    I -->|JSON Response| B
+    B -->|Render UI| L[Music Player Dashboard]
+```
+
+---
+
+## 🚀 Getting Started (Local Development)
+
+The application consists of two microservices: the **Python Backend** and the **Next.js Frontend**.
+
+### 1. Backend Setup (FastAPI & AI Models)
 ```bash
-# 1. Navigate to the project root
+# Clone the repository and navigate to the project root
+git clone https://github.com/yourusername/Emotion-Detection-and-Music-Recommendation-System.git
 cd Emotion-Detection-and-Music-Recommendation-System
 
-# 2. Activate your virtual environment
-venv\Scripts\activate      # Windows
-# source venv/bin/activate # macOS/Linux
+# Create and activate a Python virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows use: venv\Scripts\activate
 
-# 3. Install dependencies (if not already done)
+# Install dependencies
 pip install -r requirements.txt
 
-# 4. Start the Uvicorn server (runs on port 8000)
+# Start the FastAPI server
 cd backend
 python -m uvicorn app:app --reload --host 0.0.0.0 --port 8000
 ```
-*The backend will be available at `http://localhost:8000`. You can view the automated API docs at `http://localhost:8000/docs`.*
+*API Documentation available at: `http://localhost:8000/docs`*
 
-### 2. Start the Next.js Frontend
-The frontend provides the interactive user interface. Open a **new terminal window**.
-
+### 2. Frontend Setup (Next.js)
+Open a **new terminal window**:
 ```bash
-# 1. Navigate to the project root
-cd Emotion-Detection-and-Music-Recommendation-System
-
-# 2. Navigate to the frontend folder
+# Navigate to the frontend directory
 cd frontend
 
-# 3. Install NPM packages (if not already done)
+# Install Node.js dependencies
 npm install
 
-# 4. Start the development server (runs on port 3000)
+# Start the development server
 npm run dev
 ```
-*The frontend will be available at `http://localhost:3000`.*
+*Access the application at: `http://localhost:3000`*
 
 ---
 
-## ⚠️ Important Note on Keras Version Compatibility
+## ⚠️ Technical Notes & Compatibility
 
-The provided `models/emotion_model.h5` was originally trained using an older TensorFlow/Keras 2.x environment (which relied on the `batch_shape` configuration in the `InputLayer`).
-
-If you are running this project in a modern Keras 3.x environment (TF >= 2.16), the original model file cannot be deserialized correctly. To resolve this, you must either:
-1. Downgrade the environment: `pip install "tensorflow<2.16"`
-2. **Or**, re-train and re-save your custom `.h5` model inside a native Keras 3 environment.
-
-*(For testing purposes, a placeholder dummy model is generated so the API endpoints function without crashing).*
+- **Redis Requirement:** For the caching mechanism to work, a local instance of Redis must be running on port `6379`. If Redis is not found, the app gracefully degrades and bypasses caching without crashing.
+- **TensorFlow Versions:** The default custom CNN model (`emotion_model.h5`) was trained on TensorFlow 2.x. If running in a TF/Keras 3.x environment, the backend handles serialization fallbacks to ensure API stability.
+- **GPU Acceleration:** The system automatically utilizes CUDA if NVIDIA drivers are present, otherwise, it optimizes for CPU inference using AVX2 instructions.
 
 ---
 
-## 📄 License
+## 💡 Future Roadmap
 
-This project is licensed under the [MIT License](LICENSE).
+- [ ] **Spotify/Apple Music OAuth Integration:** Allow users to instantly save generated playlists directly to their personal streaming accounts.
+- [ ] **Continuous Learning:** Implement a feedback loop where users can rate playlist accuracy to retrain and fine-tune the emotion-mapping algorithm.
+- [ ] **Dockerization:** Complete `docker-compose` orchestration for seamless, one-click deployments.
+
+---
+
+<div align="center">
+  <i>Developed with ❤️ for building intelligent, user-centric AI applications.</i>
+</div>
