@@ -171,37 +171,35 @@ def get_music_by_emotion(emotion: str, limit: int = 5, language: str = "Any"):
         except Exception as e:
             print(f"WARNING: Redis read error: {e}")
 
-    # ── Step 2: Scrape YouTube with yt-dlp (Cache Miss) ──────
-    print(f"[CACHE MISS] Fetching fresh data from YouTube for query: '{query}'")
+    # ── Step 2: Scrape YouTube with DuckDuckGo Semantic Search (Cache Miss) ──────
+    search_query = f"site:youtube.com {query}"
+    print(f"[CACHE MISS] Fetching fresh data via DuckDuckGo Semantic Search for query: '{search_query}'")
     
     try:
-        import yt_dlp
-        import datetime
-        
-        ydl_opts = {
-            'quiet': True,
-            'extract_flat': True,
-            'force_generic_extractor': False,
-        }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # ytsearch5: guarantees we pull exactly the limit number of videos
-            result = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
-        
+        from ddgs import DDGS
         songs = []
-        if 'entries' in result:
-            for entry in result['entries']:
-                # Format duration to MM:SS
-                duration_sec = int(float(entry.get('duration', 0) or 0))
-                duration_str = str(datetime.timedelta(seconds=duration_sec)) if duration_sec > 0 else ""
-                if duration_str.startswith("0:"): 
-                    duration_str = duration_str[2:] # Strip leading hours if zero
+        
+        with DDGS() as ddgs:
+            # Performs a semantic video search prioritizing youtube.com
+            results = ddgs.videos(search_query, max_results=limit)
+            
+            for r in results:
+                url = r.get("content", "") or r.get("url", "")
                 
+                # Extract the 11-character YouTube video ID
+                if "youtube.com/watch?v=" in url:
+                    video_id = url.split("v=")[1].split("&")[0]
+                elif "youtu.be/" in url:
+                    video_id = url.split("youtu.be/")[1].split("?")[0]
+                else:
+                    continue
+                    
                 songs.append({
-                    "title": entry.get('title'),
-                    "video_id": entry.get('id'),
-                    "thumbnail": f"https://img.youtube.com/vi/{entry.get('id')}/hqdefault.jpg",
-                    "channel": entry.get('uploader'),
-                    "duration": duration_str
+                    "title": r.get("title", "Unknown Title"),
+                    "video_id": video_id,
+                    "thumbnail": f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg",
+                    "channel": r.get("publisher", "YouTube"),
+                    "duration": r.get("duration", "")
                 })
         
         # ── Step 3: Store in Redis Cache (expires in 24 hours) ──────
